@@ -9,19 +9,13 @@ import java.io.ByteArrayOutputStream
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
-import org.bouncycastle.jce.provider.BouncyCastleProvider
-import java.security.Security
+import java.util.Properties
 
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "com.example.router/ssh"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        
-        // 1. تسجيل BouncyCastle كمزود تشفير أمني لتفادي استثناء ClassNotFoundException
-        if (Security.getProvider("BC") == null) {
-            Security.addProvider(BouncyCastleProvider())
-        }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
@@ -33,24 +27,24 @@ class MainActivity: FlutterActivity() {
                     
                     Thread {
                         try {
-                            // إجبار JSch على تعيين BouncyCastle وتفادي أخطاء Random Class
-                            JSch.setConfig("no_auth_handler", "true")
+                            // تعيين تكوين JSch لتجنب البحث عن كلاسات التشفير المفقودة
+                            JSch.setConfig("random", "com.jcraft.jsch.jce.Random")
                             
                             val jsch = JSch()
                             val session: Session = jsch.getSession(user, host, port)
                             session.setPassword(pass)
 
-                            val config = java.util.Properties()
+                            val config = Properties()
                             config["StrictHostKeyChecking"] = "no"
-                            config["kex"] = "diffie-hellman-group1-sha1"
-                            config["cipher.s2c"] = "aes128-cbc,aes256-cbc,3des-cbc"
-                            config["cipher.c2s"] = "aes128-cbc,aes256-cbc,3des-cbc"
+                            config["kex"] = "diffie-hellman-group1-sha1,diffie-hellman-group14-sha1"
+                            config["cipher.s2c"] = "3des-cbc,aes128-cbc,aes256-cbc"
+                            config["cipher.c2s"] = "3des-cbc,aes128-cbc,aes256-cbc"
                             config["HostKeyAlgorithms"] = "ssh-rsa"
                             config["PubkeyAcceptedAlgorithms"] = "ssh-rsa"
                             session.setConfig(config)
 
                             session.connect(10000)
-                            Thread.sleep(3000) // انتظار استقرار الجلسة
+                            Thread.sleep(2000)
 
                             val channel = session.openChannel("exec")
                             (channel as com.jcraft.jsch.ChannelExec).setCommand("/netis/my_script.sh")
@@ -77,14 +71,11 @@ class MainActivity: FlutterActivity() {
                 "checkEndpoint" -> {
                     val targetIp = call.argument<String>("ip") ?: "10.30.0.1"
                     Thread {
-                        // استخدام Ping / ICMP حقيقي يتوافق مع استجابة (ms)
                         val isReachable = try {
                             val address = InetAddress.getByName(targetIp)
-                            val pingSuccess = address.isReachable(2000)
-                            if (pingSuccess) {
+                            if (address.isReachable(2000)) {
                                 true
                             } else {
-                                // محاولة احتياطية بفتح Socket
                                 val socket = Socket()
                                 socket.connect(InetSocketAddress(targetIp, 80), 1500)
                                 socket.close()

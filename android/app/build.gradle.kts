@@ -49,6 +49,6 @@ flutter {
 }
 
 dependencies {
-    implementation("com.jcraft:jsch:0.1.55")
+  implementation("com.github.mwinde:jsch:0.1.72")
     implementation("org.bouncycastle:bcprov-jdk18on:1.77")
 }
