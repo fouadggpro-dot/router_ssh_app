@@ -48,6 +48,13 @@
             </intent-filter>
         </activity>
 
+        <!-- إضافة تعريف خدمة الخلفية لمنع الـ Crash -->
+        <service
+            android:name="id.flutter.flutter_background_service.BackgroundService"
+            android:foregroundServiceType="dataSync"
+            android:exported="false"
+            tools:replace="android:foregroundServiceType" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
