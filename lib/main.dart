@@ -5,7 +5,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:open_file_plus/open_file_plus.dart';
+import 'package:open_filex/open_filex.dart'; // تم التحديث إلى open_filex
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -252,7 +252,7 @@ class _MobileHomeScreenState extends State<MobileHomeScreen> {
     if (updateFilePath.isNotEmpty) {
       final file = File(updateFilePath);
       if (await file.exists()) {
-        await OpenFile.open(updateFilePath);
+        await OpenFilex.open(updateFilePath); // تم الاستبدال هنا
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('ملف التحديث غير موجود على الجهاز!')),
@@ -418,7 +418,7 @@ class _MobileHomeScreenState extends State<MobileHomeScreen> {
                     onPressed: () {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                            content: Text('جاري تنفيؤ أمر إعادة التشغيل...')),
+                            content: Text('جاري تنفيذ أمر إعادة التشغيل...')),
                       );
                     },
                     child: const Text('Reboot',
