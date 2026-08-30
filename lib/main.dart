@@ -1,19 +1,26 @@
 import 'package:flutter/material.dart';
-import 'core/network/lan_client_service.dart';
-import 'core/network/background_service.dart';
-import 'core/security/device_identity.dart';
-import 'ui/screens/pairing_screen.dart';
-import 'ui/screens/home_screen.dart';
+import 'package:router_controller/core/network/background_service.dart';
+import 'package:router_controller/core/security/device_identity.dart';
+import 'package:router_controller/ui/screens/pairing_screen.dart';
+import 'package:router_controller/ui/screens/home_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // The isolate running inside the foreground service also runs
-  // LanClientService().start() (see background_service.dart) so the
-  // connection survives backgrounding; this call covers the
-  // foreground/in-app case before the service isolate takes over.
-  LanClientService().start();
   await initBackgroundService();
-  runApp(const RouterControllerApp());
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Router Controller Agent',
+      theme: ThemeData.dark(),
+      home: const RouterControllerApp(),
+    );
+  }
 }
 
 class RouterControllerApp extends StatefulWidget {
@@ -24,35 +31,33 @@ class RouterControllerApp extends StatefulWidget {
 }
 
 class _RouterControllerAppState extends State<RouterControllerApp> {
-  bool _loading = true;
-  bool _paired = false;
+  bool _isPaired = false;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _check();
+    _checkPairing();
   }
 
-  Future<void> _check() async {
+  Future<void> _checkPairing() async {
     final paired = await DeviceIdentityService.isPaired();
     setState(() {
-      _paired = paired;
-      _loading = false;
+      _isPaired = paired;
+      _isLoading = false;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Router Controller',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(primarySwatch: Colors.indigo, scaffoldBackgroundColor: const Color(0xFFF8F9FA)),
-      locale: const Locale('ar'),
-      home: _loading
-          ? const Scaffold(body: Center(child: CircularProgressIndicator()))
-          : _paired
-              ? const HomeScreen()
-              : PairingScreen(onPaired: () => setState(() => _paired = true)),
-    );
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    return _isPaired
+        ? const HomeScreen()
+        : PairingScreen(onPaired: () => setState(() => _isPaired = true));
   }
 }

@@ -38,6 +38,5 @@ class NetworkMessage {
 
   String encode() => jsonEncode(toJson());
 
-  factory NetworkMessage.decode(String str) =>
-      NetworkMessage.fromJson(jsonDecode(str));
+  factory NetworkMessage.decode(String str) => NetworkMessage.fromJson(jsonDecode(str));
 }
