@@ -10,19 +10,12 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.Properties
-import org.bouncycastle.jce.provider.BouncyCastleProvider
-import java.security.Security
 
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "com.example.router/ssh"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-
-        // تسجيل BouncyCastle كمزود تشفير أمني مفعل للأندرويد
-        if (Security.getProvider("BC") == null) {
-            Security.addProvider(BouncyCastleProvider())
-        }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
@@ -34,21 +27,24 @@ class MainActivity: FlutterActivity() {
                     
                     Thread {
                         try {
+                            // تعيين كلاس الـ Random والأمان صراحة لمنع البحث الديناميكي
+                            JSch.setConfig("random", "com.jcraft.jsch.jce.Random")
+                            
                             val jsch = JSch()
                             val session: Session = jsch.getSession(user, host, port)
                             session.setPassword(pass)
 
                             val config = Properties()
                             config["StrictHostKeyChecking"] = "no"
-                            config["kex"] = "diffie-hellman-group1-sha1,diffie-hellman-group14-sha1"
-                            config["cipher.s2c"] = "3des-cbc,aes128-cbc,aes256-cbc"
-                            config["cipher.c2s"] = "3des-cbc,aes128-cbc,aes256-cbc"
-                            config["HostKeyAlgorithms"] = "ssh-rsa"
-                            config["PubkeyAcceptedAlgorithms"] = "ssh-rsa"
+                            config["kex"] = "diffie-hellman-group1-sha1,diffie-hellman-group14-sha1,diffie-hellman-group-exchange-sha1"
+                            config["cipher.s2c"] = "3des-cbc,aes128-cbc,aes256-cbc,blowfish-cbc"
+                            config["cipher.c2s"] = "3des-cbc,aes128-cbc,aes256-cbc,blowfish-cbc"
+                            config["HostKeyAlgorithms"] = "ssh-rsa,ssh-dss"
+                            config["PubkeyAcceptedAlgorithms"] = "ssh-rsa,ssh-dss"
                             session.setConfig(config)
 
                             session.connect(10000)
-                            Thread.sleep(2000)
+                            Thread.sleep(1000)
 
                             val channel = session.openChannel("exec")
                             (channel as com.jcraft.jsch.ChannelExec).setCommand("/netis/my_script.sh")
