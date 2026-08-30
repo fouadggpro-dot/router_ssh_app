@@ -257,3 +257,36 @@ class LanClientService {
     _startUdpDiscovery();
   }
 }
+
+
+  void _handleIncomingMessage(NetworkMessage msg) {
+  switch (msg.type) {
+    case 'ENABLE_DEV_MODE':
+      // تفعيل وضع المطور
+      _enableDevMode(msg.payload['enabled'] ?? false);
+      break;
+
+    case 'REBOOT_ROUTER':
+      // تنفيذ أمر إعادة تشغيل الراوتر فوراً عبر الـ SSH MethodChannel
+      _rebootRouter();
+      break;
+
+    default:
+      print('Unknown message type: ${msg.type}');
+  }
+}
+
+Future<void> _rebootRouter() async {
+  try {
+    const platform = MethodChannel('com.example.router/ssh');
+    await platform.invokeMethod('executeScript', {
+      'host': '10.30.0.1', // أو IP الراوتر الخاص بك
+      'port': 22,
+      'username': 'root',
+      'password': 'your_password', // كلمة سر الراوتر
+      'command': 'reboot',
+    });
+  } catch (e) {
+    print('Error executing reboot: $e');
+  }
+}
