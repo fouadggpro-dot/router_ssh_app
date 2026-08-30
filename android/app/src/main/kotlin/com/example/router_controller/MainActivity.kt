@@ -10,12 +10,19 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.Properties
+import org.bouncycastle.jce.provider.BouncyCastleProvider
+import java.security.Security
 
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "com.example.router/ssh"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        // تسجيل مزود BouncyCastle لحل مشكلة com.jcraft.jce.random
+        if (Security.getProvider("BC") == null) {
+            Security.addProvider(BouncyCastleProvider())
+        }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
@@ -27,7 +34,6 @@ class MainActivity: FlutterActivity() {
                     
                     Thread {
                         try {
-                            // تعيين تكوين JSch لتجنب البحث عن كلاسات التشفير المفقودة
                             JSch.setConfig("random", "com.jcraft.jsch.jce.Random")
                             
                             val jsch = JSch()
