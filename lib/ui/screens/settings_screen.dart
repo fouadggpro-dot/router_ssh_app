@@ -50,10 +50,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _save() async {
     await DeviceIdentityService.setRouterConfig(
-      host: _host.text.trim(),
-      port: _port.text.trim(),
-      username: _user.text.trim(),
-      password: _pass.text,
+      _host.text.trim(),
+      _user.text.trim(),
+      _pass.text,
     );
     setState(() => _saved = true);
     Future.delayed(const Duration(seconds: 2), () {

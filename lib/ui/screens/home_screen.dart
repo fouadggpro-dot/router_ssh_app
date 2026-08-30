@@ -47,8 +47,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final name = await DeviceIdentityService.getUserName();
     final ctrl = await DeviceIdentityService.getControllerName();
     setState(() {
-      _userName = name;
-      _controllerName = ctrl;
+      _userName = name ?? '';
+      _controllerName = ctrl ?? '';
       _isConnected = LanClientService().isConnected;
     });
   }
