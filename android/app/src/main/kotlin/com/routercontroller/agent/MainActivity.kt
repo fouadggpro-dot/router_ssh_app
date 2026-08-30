@@ -1,6 +1,12 @@
 package com.routercontroller.agent
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import com.jcraft.jsch.ChannelExec
 import com.jcraft.jsch.JSch
 import com.jcraft.jsch.Session
@@ -56,11 +62,6 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "installApk" -> {
-                        // Delegates to ApkUpdateHelper which downloads to app-scoped
-                        // storage and calls the system PackageInstaller — the OS
-                        // itself shows the final "Install this update?" prompt,
-                        // this method is only reached after the user already
-                        // tapped Approve on ApprovalScreen.
                         val url = call.argument<String>("url") ?: ""
                         val version = call.argument<String>("version") ?: ""
                         scope.launch {
