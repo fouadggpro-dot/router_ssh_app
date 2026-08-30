@@ -1,7 +1,12 @@
-# JSch and BouncyCastle use reflection internally; without these
-# rules R8 strips classes it can't see referenced statically and the
-# release build throws ClassNotFoundException at the SSH handshake.
+# Flutter Engine & Embedding
+-keep class io.flutter.** { *; }
+-keepclassmembers class io.flutter.** { *; }
+-keep class com.routercontroller.agent.** { *; }
+
+# JSch SSH Library
 -keep class com.jcraft.jsch.** { *; }
--keep class org.bouncycastle.** { *; }
 -dontwarn com.jcraft.jsch.**
--dontwarn org.bouncycastle.**
+
+# Kotlin Coroutines
+-keep class kotlinx.coroutines.** { *; }
+-keepclassmembers class kotlinx.coroutines.** { *; }
