@@ -19,7 +19,7 @@ class MainActivity: FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        // تسجيل مزود BouncyCastle لحل مشكلة com.jcraft.jce.random
+        // تسجيل BouncyCastle كمزود تشفير أمني مفعل للأندرويد
         if (Security.getProvider("BC") == null) {
             Security.addProvider(BouncyCastleProvider())
         }
@@ -34,8 +34,6 @@ class MainActivity: FlutterActivity() {
                     
                     Thread {
                         try {
-                            JSch.setConfig("random", "com.jcraft.jsch.jce.Random")
-                            
                             val jsch = JSch()
                             val session: Session = jsch.getSession(user, host, port)
                             session.setPassword(pass)
