@@ -27,12 +27,9 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
+            // إيقاف Minify مؤقتاً للتأكد من ربط جميع المكتبات دون حذف
+            isMinifyEnabled = false
+            isShrinkResources = false
             signingConfig = signingConfigs.getByName("debug")
         }
     }
@@ -46,8 +43,6 @@ dependencies {
     implementation("com.jcraft:jsch:0.1.55")
     implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
     implementation("androidx.core:core-ktx:1.13.1")
-
-    // إضافة مكتبات Coroutines لضمان التعرف عليها أثناء التجميع
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 }
