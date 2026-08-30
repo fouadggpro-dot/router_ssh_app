@@ -35,7 +35,8 @@ void _onStart(ServiceInstance service) async {
     if (service is AndroidServiceInstance) {
       if (connected) {
         final name = await DeviceIdentityService.getControllerName();
-        final displayName = (name != null && name.isNotEmpty) ? name : "?";
+        final safeName = name ?? '';
+        final displayName = safeName.isNotEmpty ? safeName : "?";
         service.setForegroundNotificationInfo(
           title: 'Router Controller',
           content: 'متصل بلوحة تحكم: $displayName — اضغط لفتح التطبيق وقطع الاتصال',
