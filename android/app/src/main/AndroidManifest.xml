@@ -48,12 +48,12 @@
             </intent-filter>
         </activity>
 
-        <!-- إضافة تعريف خدمة الخلفية لمنع الـ Crash -->
+        <!-- تعريف الخدمة مع استبدال الخواص المتعارضة لتفادي خطأ Manifest Merger -->
         <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
             android:foregroundServiceType="dataSync"
-            android:exported="false"
-            tools:replace="android:foregroundServiceType" />
+            android:exported="true"
+            tools:replace="android:exported,android:foregroundServiceType" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
