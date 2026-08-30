@@ -10,6 +10,8 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        // تفعيل Desugaring لحل مشكلة flutter_local_notifications
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -27,7 +29,6 @@ android {
 
     buildTypes {
         release {
-            // إيقاف Minify مؤقتاً للتأكد من ربط جميع المكتبات دون حذف
             isMinifyEnabled = false
             isShrinkResources = false
             signingConfig = signingConfigs.getByName("debug")
@@ -40,6 +41,9 @@ flutter {
 }
 
 dependencies {
+    // مكتبة Desugaring الإجبارية
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+
     implementation("com.jcraft:jsch:0.1.55")
     implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
     implementation("androidx.core:core-ktx:1.13.1")
