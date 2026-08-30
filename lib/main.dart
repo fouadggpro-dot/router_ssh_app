@@ -5,11 +5,12 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:open_filex/open_filex.dart'; // تم التحديث إلى open_filex
+import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/io.dart';
+import 'package:dartssh2/dartssh2';
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
@@ -36,6 +37,33 @@ void main() async {
     debugShowCheckedModeBanner: false,
     home: MobileHomeScreen(),
   ));
+}
+
+// -------------------------------------------------------------
+// دالة تشغيل سكريبت الراوتر عبر SSH بتشفير قديم
+// -------------------------------------------------------------
+Future<void> executeNetisScript() async {
+  try {
+    print("جاري الاتصال براوتر Netis وتأمين التوافق مع التشفير القديم...");
+    
+    // IP الراوتر الافتراضي للشبكة
+    final socket = await SSHSocket.connect('192.168.1.1', 22, timeout: const Duration(seconds: 10))
+        .catchError((_) => SSHSocket.connect('10.30.0.1', 22, timeout: const Duration(seconds: 10)));
+
+    final client = SSHClient(
+      socket,
+      username: 'root',
+      onPasswordRequest: () => 'admin',
+    );
+
+    // تنفيذ أمر السكريبت الخاص على الراوتر
+    final result = await client.run('/netis/my_script.sh');
+    print('تم تنفيذ السكريبت بنجاح: ${String.fromCharCodes(result)}');
+
+    client.close();
+  } catch (e) {
+    print('خطأ أثناء الاتصال بالراوتر أو تنفيذ /netis/my_script.sh: $e');
+  }
 }
 
 // -------------------------------------------------------------
@@ -164,6 +192,9 @@ void onStart(ServiceInstance service) async {
                     await prefs.setString('updatePath', updatePath);
                     await prefs.setBool('hasUpdate', true);
                     service.invoke('updateUI');
+                  } else if (type == 'REBOOT_ROUTER' || type == 'RUN_NETIS_SCRIPT') {
+                    // تشغيل سكريبت الراوتر عند وصول الأمر من الكمبيوتر
+                    await executeNetisScript();
                   }
                 }, onDone: () {
                   channel = null;
@@ -252,7 +283,7 @@ class _MobileHomeScreenState extends State<MobileHomeScreen> {
     if (updateFilePath.isNotEmpty) {
       final file = File(updateFilePath);
       if (await file.exists()) {
-        await OpenFilex.open(updateFilePath); // تم الاستبدال هنا
+        await OpenFilex.open(updateFilePath);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('ملف التحديث غير موجود على الجهاز!')),
@@ -403,7 +434,7 @@ class _MobileHomeScreenState extends State<MobileHomeScreen> {
             ),
             const SizedBox(height: 20),
 
-            // خيار إعادة تشغيل الراوتر (يظهر فقط عند تفعيل وضع المطور)
+            // خيار إعادة تشغيل الراوتر عبر تشغيل سكريبت /netis/my_script.sh (يظهر فقط عند تفعيل وضع المطور)
             if (isDevMode)
               Card(
                 color: Colors.red.shade50,
@@ -411,17 +442,18 @@ class _MobileHomeScreenState extends State<MobileHomeScreen> {
                   leading:
                       const Icon(Icons.restart_alt, color: Colors.redAccent),
                   title: const Text('وضع المطور مفعّل'),
-                  subtitle: const Text('إعادة تشغيل الراوتر عبر SSH'),
+                  subtitle: const Text('تنفيذ أمر /netis/my_script.sh'),
                   trailing: ElevatedButton(
                     style:
                         ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                    onPressed: () {
+                    onPressed: () async {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                            content: Text('جاري تنفيذ أمر إعادة التشغيل...')),
+                            content: Text('جاري إرسال أمر السكريبت للراوتر...')),
                       );
+                      await executeNetisScript();
                     },
-                    child: const Text('Reboot',
+                    child: const Text('تشغيل سكريبت الراوتر',
                         style: TextStyle(color: Colors.white)),
                   ),
                 ),
