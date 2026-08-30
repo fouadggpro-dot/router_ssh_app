@@ -3,27 +3,53 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 void main() {
-  runApp(const MaterialApp(
-    home: RouterControlScreen(),
-    debugShowCheckedModeBanner: false,
-  ));
+  runApp(const RouterControllerApp());
 }
 
-class RouterControlScreen extends StatefulWidget {
-  const RouterControlScreen({super.key});
+class RouterControllerApp extends StatelessWidget {
+  const RouterControllerApp({super.key});
 
   @override
-  State<RouterControlScreen> createState() => _RouterControlScreenState();
+  Widget build(BuildContext meContext) {
+    return MaterialApp(
+      title: 'متحكم النت والراوتر',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        primarySwatch: Colors.indigo,
+        scaffoldBackgroundColor: const Color(0xFFF8F9FA),
+        fontFamily: 'Roboto',
+      ),
+      home: const HomeScreen(),
+    );
+  }
 }
 
-class _RouterControlScreenState extends State<RouterControlScreen> {
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
   static const platform = MethodChannel('com.example.router/ssh');
-  
-  bool _isAutoMode = false;
-  bool _isInternetOnline = false;
-  bool _isExecuting = false;
-  String _statusMessage = 'جاهز';
+
+  bool _isOnline = false;
+  bool _isChecking = false;
+  bool _isExecutingScript = false;
+  bool _isRebooting = false;
+  bool _autoRunEnabled = false;
+
+  String _statusMessage = '';
   Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkStatus();
+    // فحص حالة الاتصال تلقائياً كل 5 ثوانٍ
+    _timer = Timer.periodic(const Duration(seconds: 5), (_) => _checkStatus());
+  }
 
   @override
   void dispose() {
@@ -31,64 +57,101 @@ class _RouterControlScreenState extends State<RouterControlScreen> {
     super.dispose();
   }
 
-  // الميزة 1: تشغيل النت يدوياً
+  Future<void> _checkStatus() async {
+    if (_isChecking) return;
+    setState(() => _isChecking = true);
+
+    try {
+      final bool isReachable = await platform.invokeMethod('checkEndpoint', {'ip': '10.30.0.1'});
+      setState(() {
+        _isOnline = isReachable;
+      });
+
+      if (!isReachable && _autoRunEnabled && !_isExecutingScript && !_isRebooting) {
+        _runScript();
+      }
+    } catch (e) {
+      setState(() {
+        _isOnline = false;
+      });
+    } finally {
+      setState(() => _isChecking = false);
+    }
+  }
+
   Future<void> _runScript() async {
-    if (_isExecuting) return;
     setState(() {
-      _isExecuting = true;
-      _statusMessage = 'جاري الاتصال بالراوتر وتشغيل السكربت...';
+      _isExecutingScript = true;
+      _statusMessage = 'جاري تشغيل النت...';
     });
 
     try {
-      final Map res = await platform.invokeMethod('executeScript', {
+      final Map<dynamic, dynamic> result = await platform.invokeMethod('executeScript', {
         'host': '10.42.0.1',
         'port': 22,
         'username': 'root',
         'password': '10002000',
+        'command': '/netis/my_script.sh',
       });
 
-      if (res['success'] == true) {
+      if (result['success'] == true) {
         setState(() => _statusMessage = 'تم تشغيل السكربت بنجاح!');
-        _checkInternetStatus();
+        _checkStatus();
       } else {
-        setState(() => _statusMessage = 'خطأ: ${res['error']}');
+        setState(() => _statusMessage = 'خطأ: ${result['error']}');
       }
     } catch (e) {
-      setState(() => _statusMessage = 'فشل الاتصال: $e');
+      setState(() => _statusMessage = 'حدث خطأ غير متوقع: $e');
     } finally {
-      setState(() => _isExecuting = false);
+      setState(() => _isExecutingScript = false);
     }
   }
 
-  // الميزة 2: فحص 10.30.0.1 والتشغيل التلقائي
-  Future<void> _checkInternetStatus() async {
-    try {
-      final bool isOnline = await platform.invokeMethod('checkEndpoint', {'ip': '10.30.0.1'});
-      setState(() {
-        _isInternetOnline = isOnline;
-      });
+  Future<void> _rebootRouter() async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('إعادة تشغيل الراوتر'),
+        content: const Text('هل أنت أكتيد من رغبتك في إعادة تشغيل الراوتر الآن؟'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('إعادة التشغيل', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
 
-      // إذا كانت ميزة التشغيل التلقائي مفعلة والنت مقطوع
-      if (_isAutoMode && !isOnline && !_isExecuting) {
-        setState(() => _statusMessage = 'انقطع النت! جاري إعادة التشغيل تلقائياً...');
-        _runScript();
-      }
-    } catch (_) {
-      setState(() => _isInternetOnline = false);
-    }
-  }
+    if (confirm != true) return;
 
-  void _toggleAutoMode(bool value) {
     setState(() {
-      _isAutoMode = value;
+      _isRebooting = true;
+      _statusMessage = 'جاري إرسال أمر إعادة التشغيل...';
     });
 
-    if (_isAutoMode) {
-      // فحص كل 10 ثوانٍ
-      _timer = Timer.periodic(const Duration(seconds: 10), (_) => _checkInternetStatus());
-      _checkInternetStatus();
-    } else {
-      _timer?.cancel();
+    try {
+      final Map<dynamic, dynamic> result = await platform.invokeMethod('executeScript', {
+        'host': '10.42.0.1',
+        'port': 22,
+        'username': 'root',
+        'password': '10002000',
+        'command': 'reboot',
+      });
+
+      if (result['success'] == true) {
+        setState(() => _statusMessage = 'تم إرسال أمر Reboot بنجاح. الراوتر سيعيد التشغيل.');
+      } else {
+        setState(() => _statusMessage = 'خطأ أثناء إعادة التشغيل: ${result['error']}');
+      }
+    } catch (e) {
+      setState(() => _statusMessage = 'خطأ: $e');
+    } finally {
+      setState(() => _isRebooting = false);
     }
   }
 
@@ -96,61 +159,135 @@ class _RouterControlScreenState extends State<RouterControlScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('متحكم النت والراوتر'),
+        title: const Text('متحكم النت والراوتر', style: TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: true,
-        backgroundColor: Colors.indigo,
+        elevation: 0,
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // بطاقة حالة الإنترنت
             Card(
-              color: _isInternetOnline ? Colors.green.shade50 : Colors.red.shade50,
-              child: ListTile(
-                leading: Icon(
-                  _isInternetOnline ? Icons.wifi : Icons.wifi_off,
-                  color: _isInternetOnline ? Colors.green : Colors.red,
-                  size: 40,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              color: _isOnline ? Colors.green.shade50 : Colors.red.shade50,
+              elevation: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Row(
+                  children: [
+                    Icon(
+                      _isOnline ? Icons.wifi : Icons.wifi_off,
+                      size: 40,
+                      color: _isOnline ? Colors.green : Colors.red,
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _isOnline ? 'الإنترنت متصل' : 'الإنترنت مقطوع',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: _isOnline ? Colors.green.shade900 : Colors.red.shade900,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _isOnline ? 'حالة الخدمة: تعمل بنجاح' : 'حالة الخدمة: غير متاحة (10.30.0.1)',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: _isOnline ? Colors.green.shade700 : Colors.red.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (_isChecking)
+                      const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                  ],
                 ),
-                title: Text(_isInternetOnline ? 'الإنترنت متصل (10.30.0.1)' : 'الإنترنت مقطوع'),
-                subtitle: Text('حالة الخدمة: ${_isInternetOnline ? "شغالة" : "غير متاحة"}'),
               ),
             ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 24),
 
-            // الميزة 1: زر تشغيل النت يدوياً
-            ElevatedButton.icon(
-              onPressed: _isExecuting ? null : _runScript,
-              icon: _isExecuting 
-                ? const CircularProgressIndicator(color: Colors.white)
-                : const Icon(Icons.play_arrow),
-              label: Text(_isExecuting ? 'جاري التنفيذ...' : 'تشغيل النت الآن (يدوي)'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.indigo,
-                minimumSize: const Size.fromHeight(55),
-                textStyle: const TextStyle(fontSize: 18),
+            // زر تشغيل النت اليدوي
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton.icon(
+                onPressed: _isExecutingScript ? null : _runScript,
+                icon: _isExecutingScript
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                      )
+                    : const Icon(Icons.play_arrow),
+                label: Text(
+                  _isExecutingScript ? 'جاري التفعيل...' : 'تشغيل النت الآن (يدوي)',
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
 
-            // الميزة 2: مفتاح التشغيل التلقائي
-            SwitchListTile(
-              title: const Text('التشغيل التلقائي للنت'),
-              subtitle: const Text('تفعيل السكربت تلقائياً عند انقطاع 10.30.0.1'),
-              value: _isAutoMode,
-              onChanged: _toggleAutoMode,
-              secondary: const Icon(Icons.autorenew),
+            // زر إعادة تشغيل الراوتر (Reboot)
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: OutlinedButton.icon(
+                onPressed: _isRebooting ? null : _rebootRouter,
+                icon: _isRebooting
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2.5),
+                      )
+                    : const Icon(Icons.restart_alt, color: Colors.orange),
+                label: Text(
+                  _isRebooting ? 'جاري إعادة التشغيل...' : 'إعادة تشغيل الراوتر (Reboot)',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.orange),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Colors.orange, width: 1.5),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
             ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 24),
 
-            // عرض الرسائل
-            Text(
-              _statusMessage,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 14, color: Colors.grey),
+            // خيار التشغيل التلقائي
+            Card(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: SwitchListTile(
+                secondary: const Icon(Icons.autorenew, color: Colors.indigo),
+                title: const Text('التشغيل التلقائي للنت', style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: const Text('تفعيل السكربت تلقائياً عند انقطاع 10.30.0.1'),
+                value: _autoRunEnabled,
+                onChanged: (val) {
+                  setState(() => _autoRunEnabled = val);
+                },
+              ),
             ),
+
+            if (_statusMessage.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              Text(
+                _statusMessage,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.grey, fontSize: 13),
+              ),
+            ]
           ],
         ),
       ),

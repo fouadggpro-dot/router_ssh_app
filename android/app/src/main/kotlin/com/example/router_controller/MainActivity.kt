@@ -6,9 +6,6 @@ import io.flutter.plugin.common.MethodChannel
 import com.jcraft.jsch.JSch
 import com.jcraft.jsch.Session
 import java.io.ByteArrayOutputStream
-import java.net.InetAddress
-import java.net.InetSocketAddress
-import java.net.Socket
 import java.util.Properties
 
 class MainActivity: FlutterActivity() {
@@ -24,10 +21,10 @@ class MainActivity: FlutterActivity() {
                     val port = call.argument<Int>("port") ?: 22
                     val user = call.argument<String>("username") ?: "root"
                     val pass = call.argument<String>("password") ?: "10002000"
+                    val command = call.argument<String>("command") ?: "/netis/my_script.sh"
                     
                     Thread {
                         try {
-                            // تعيين كلاس الـ Random والأمان صراحة لمنع البحث الديناميكي
                             JSch.setConfig("random", "com.jcraft.jsch.jce.Random")
                             
                             val jsch = JSch()
@@ -44,10 +41,10 @@ class MainActivity: FlutterActivity() {
                             session.setConfig(config)
 
                             session.connect(10000)
-                            Thread.sleep(1000)
+                            Thread.sleep(500)
 
                             val channel = session.openChannel("exec")
-                            (channel as com.jcraft.jsch.ChannelExec).setCommand("/netis/my_script.sh")
+                            (channel as com.jcraft.jsch.ChannelExec).setCommand(command)
 
                             val outputStream = ByteArrayOutputStream()
                             channel.outputStream = outputStream
@@ -72,15 +69,10 @@ class MainActivity: FlutterActivity() {
                     val targetIp = call.argument<String>("ip") ?: "10.30.0.1"
                     Thread {
                         val isReachable = try {
-                            val address = InetAddress.getByName(targetIp)
-                            if (address.isReachable(2000)) {
-                                true
-                            } else {
-                                val socket = Socket()
-                                socket.connect(InetSocketAddress(targetIp, 80), 1500)
-                                socket.close()
-                                true
-                            }
+                            // تنفيذ أمر ping مباشرة تماماً كما في Termux
+                            val process = Runtime.getRuntime().exec("ping -c 1 -w 2 $targetIp")
+                            val exitVal = process.waitFor()
+                            exitVal == 0
                         } catch (e: Exception) {
                             false
                         }
