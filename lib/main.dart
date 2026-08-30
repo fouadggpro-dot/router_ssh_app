@@ -1,121 +1,421 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-void main() {
-  runApp(const MyApp());
+import 'core/security/device_identity.dart';
+import 'core/network/lan_client_service.dart';
+import 'ui/screens/first_run_screen.dart';
+import 'ui/screens/maintenance_screen.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // تشغيل خدمة الاتصال بالشبكة المحلية LAN في الخلفية
+  LanClientService().start();
+  
+  runApp(const RouterControllerApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class RouterControllerApp extends StatefulWidget {
+  const RouterControllerApp({super.key});
 
-  // This widget is the root of your application.
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
-    );
+  State<RouterControllerApp> createState() => _RouterControllerAppState();
+}
+
+class _RouterControllerAppState extends State<RouterControllerApp> {
+  bool _isFirstRun = true;
+  bool _isAppDisabled = false;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAppState();
+
+    // الاستماع الفوري لأوامر التعطيل/التفعيل القادمة من Windows Controller
+    LanClientService().onAppStatusChanged = (isDisabled) {
+      if (mounted) {
+        setState(() {
+          _isAppDisabled = isDisabled;
+        });
+      }
+    };
   }
-}
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+  Future<void> _checkAppState() async {
+    final userName = await DeviceIdentityService.getUserName();
+    final disabled = await DeviceIdentityService.isAppDisabled();
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      _isFirstRun = userName.isEmpty;
+      _isAppDisabled = disabled;
+      _isLoading = false;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
+    if (_isLoading) {
+      return const MaterialApp(
+        home: Scaffold(body: Center(child: CircularProgressIndicator())),
+      );
+    }
+
+    Widget homeScreen;
+    if (_isFirstRun) {
+      homeScreen = FirstRunScreen(onSetupComplete: () {
+        setState(() => _isFirstRun = false);
+      });
+    } else if (_isAppDisabled) {
+      homeScreen = const MaintenanceScreen();
+    } else {
+      homeScreen = const HomeScreen();
+    }
+
+    return MaterialApp(
+      title: 'متحكم النت والراوتر',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        primarySwatch: Colors.indigo,
+        scaffoldBackgroundColor: const Color(0xFFF8F9FA),
+      ),
+      home: homeScreen,
+    );
+  }
+}
+
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  static const platform = MethodChannel('com.example.router/ssh');
+
+  bool _isOnline = false;
+  bool _isChecking = false;
+  bool _isExecutingScript = false;
+  bool _isRebooting = false;
+  bool _autoRunEnabled = false;
+  bool _isDevMode = false;
+
+  String _userName = '';
+  String _deviceId = '';
+  String _statusMessage = '';
+  Timer? _timer;
+
+  final TextEditingController _customCommandController = TextEditingController();
+  String _customCommandOutput = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadIdentity();
+    _checkStatus();
+    _timer = Timer.periodic(const Duration(seconds: 4), (_) => _checkStatus());
+
+    // تحديث خيارات المطور فور تغيير الصلاحية من Controller
+    LanClientService().onDevModeChanged = (isDev) {
+      if (mounted) {
+        setState(() => _isDevMode = isDev);
+      }
+    };
+  }
+
+  Future<void> _loadIdentity() async {
+    final name = await DeviceIdentityService.getUserName();
+    final id = await DeviceIdentityService.getOrCreateDeviceId();
+    final dev = await DeviceIdentityService.isDeveloperMode();
+    setState(() {
+      _userName = name;
+      _deviceId = id;
+      _isDevMode = dev;
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _customCommandController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _checkStatus() async {
+    if (_isChecking) return;
+    setState(() => _isChecking = true);
+
+    try {
+      final bool isReachable = await platform
+          .invokeMethod('checkEndpoint', {'ip': '10.30.0.1'})
+          .timeout(const Duration(seconds: 2), onTimeout: () => false);
+
+      if (mounted) {
+        setState(() {
+          _isOnline = isReachable;
+        });
+      }
+
+      if (!isReachable && _autoRunEnabled && !_isExecutingScript && !_isRebooting) {
+        _runScript();
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isOnline = false);
+    } finally {
+      if (mounted) setState(() => _isChecking = false);
+    }
+  }
+
+  Future<void> _runScript() async {
+    if (_isExecutingScript) return;
+
+    setState(() {
+      _isExecutingScript = true;
+      _statusMessage = 'جاري تنفيذ السكربت...';
+    });
+
+    try {
+      final dynamic rawResult = await platform.invokeMethod('executeScript', {
+        'host': '10.42.0.1',
+        'port': 22,
+        'username': 'root',
+        'password': '10002000',
+        'command': '/netis/my_script.sh',
+      }).timeout(
+        const Duration(seconds: 6),
+        onTimeout: () => {'success': true, 'output': 'تم الإرسال (انقضى وقت الانتظار)'},
+      );
+
+      final Map<dynamic, dynamic> result = Map<dynamic, dynamic>.from(rawResult);
+
+      if (mounted) {
+        if (result['success'] == true) {
+          setState(() => _statusMessage = 'تم تشغيل السكربت بنجاح!');
+        } else {
+          setState(() => _statusMessage = 'خطأ: ${result['error']}');
+        }
+      }
+    } catch (e) {
+      if (mounted) setState(() => _statusMessage = 'تم إرسال الأمر للراوتر.');
+    } finally {
+      if (mounted) {
+        setState(() => _isExecutingScript = false);
+        _checkStatus();
+      }
+    }
+  }
+
+  Future<void> _executeCustomCommand() async {
+    final cmd = _customCommandController.text.trim();
+    if (cmd.isEmpty) return;
+
+    setState(() {
+      _statusMessage = 'جاري تنفيذ الأمر المخصص...';
+      _customCommandOutput = 'انتظار النتيجة...';
+    });
+
+    try {
+      final dynamic rawResult = await platform.invokeMethod('executeScript', {
+        'host': '10.42.0.1',
+        'port': 22,
+        'username': 'root',
+        'password': '10002000',
+        'command': cmd,
+      }).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => {'success': false, 'error': 'Timeout Error'},
+      );
+
+      final Map<dynamic, dynamic> result = Map<dynamic, dynamic>.from(rawResult);
+
+      if (mounted) {
+        setState(() {
+          _customCommandOutput = "Exit Code: ${result['exitCode']}\nOutput:\n${result['output'] ?? result['error']}";
+          _statusMessage = 'اكتمل تنفيذ الأمر.';
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _customCommandOutput = 'حدث خطأ أثناء التنفيذ: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: const Text('متحكم النت والراوتر', style: TextStyle(fontWeight: FontWeight.bold)),
+        centerTitle: true,
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20.0),
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
           children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+            // بطاقة بيانات المستخدم والجهاز وحالة اتصال الـ Controller
+            Card(
+              elevation: 1.5,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Row(
+                  children: [
+                    const CircleAvatar(backgroundColor: Colors.indigo, child: Icon(Icons.person, color: Colors.white)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('المستخدم: $_userName', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                          Text('ID: $_deviceId', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      LanClientService().isConnected ? Icons.cloud_done : Icons.cloud_off,
+                      color: LanClientService().isConnected ? Colors.green : Colors.grey,
+                    ),
+                  ],
+                ),
+              ),
             ),
+            const SizedBox(height: 16),
+
+            // بطاقة حالة الإنترنت
+            Card(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              color: _isOnline ? Colors.green.shade50 : Colors.red.shade50,
+              elevation: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Row(
+                  children: [
+                    Icon(
+                      _isOnline ? Icons.wifi : Icons.wifi_off,
+                      size: 40,
+                      color: _isOnline ? Colors.green : Colors.red,
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _isOnline ? 'الإنترنت متصل' : 'الإنترنت مقطوع',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: _isOnline ? Colors.green.shade900 : Colors.red.shade900,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _isOnline ? 'حالة الخدمة: تعمل بنجاح' : 'حالة الخدمة: غير متاحة (10.30.0.1)',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: _isOnline ? Colors.green.shade700 : Colors.red.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (_isChecking)
+                      const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // زر تشغيل النت اليدوي
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton.icon(
+                onPressed: _isExecutingScript ? null : _runScript,
+                icon: _isExecutingScript
+                    ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                    : const Icon(Icons.play_arrow),
+                label: Text(
+                  _isExecutingScript ? 'جاري التفعيل...' : 'تشغيل النت الآن (يدوي)',
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // خيار التشغيل التلقائي
+            Card(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: SwitchListTile(
+                secondary: const Icon(Icons.autorenew, color: Colors.indigo),
+                title: const Text('التشغيل التلقائي للنت', style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: const Text('تفعيل السكربت تلقائياً عند انقطاع 10.30.0.1'),
+                value: _autoRunEnabled,
+                onChanged: (val) => setState(() => _autoRunEnabled = val),
+              ),
+            ),
+
+            // خيارات المطور (تظهر عند الاستجابة لأمر المطور من Controller)
+            if (_isDevMode) ...[
+              const SizedBox(height: 20),
+              const Align(
+                alignment: Alignment.centerRight,
+                child: Text('خيارات المطور (Developer Mode)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.indigo)),
+              ),
+              const SizedBox(height: 8),
+              Card(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: Padding(
+                  padding: const EdgeInsets.all(14.0),
+                  child: Column(
+                    children: [
+                      TextField(
+                        controller: _customCommandController,
+                        decoration: const InputDecoration(
+                          labelText: 'Custom Router Command',
+                          hintText: 'e.g. reboot or /netis/my_script.sh',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      ElevatedButton.icon(
+                        onPressed: _executeCustomCommand,
+                        icon: const Icon(Icons.code),
+                        label: const Text('Execute'),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo.shade900),
+                      ),
+                      if (_customCommandOutput.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(10),
+                          color: Colors.black,
+                          child: Text(
+                            _customCommandOutput,
+                            style: const TextStyle(color: Colors.greenAccent, fontFamily: 'monospace', fontSize: 12),
+                          ),
+                        ),
+                      ]
+                    ],
+                  ),
+                ),
+              ),
+            ],
+
+            if (_statusMessage.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Text(_statusMessage, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+            ],
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
       ),
     );
   }
