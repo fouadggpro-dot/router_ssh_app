@@ -29,7 +29,6 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("debug")
-            // إضافة قواعد ProGuard لحماية مكتبات SSH والتشفير من الحذف
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -45,4 +44,6 @@ flutter {
 dependencies {
     implementation("com.jcraft:jsch:0.1.55")
     implementation("org.bouncycastle:bcprov-jdk18on:1.77")
+    // مكتبة العمل في الخلفية للأندرويد
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
 }

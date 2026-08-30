@@ -26,7 +26,6 @@ class MainActivity: FlutterActivity() {
                     Thread {
                         try {
                             JSch.setConfig("random", "com.jcraft.jsch.jce.Random")
-                            
                             val jsch = JSch()
                             val session: Session = jsch.getSession(user, host, port)
                             session.setPassword(pass)
@@ -40,8 +39,8 @@ class MainActivity: FlutterActivity() {
                             config["PubkeyAcceptedAlgorithms"] = "ssh-rsa,ssh-dss"
                             session.setConfig(config)
 
-                            session.connect(10000)
-                            Thread.sleep(500)
+                            // المهلة 5 ثوانٍ فقط لمنع التعليق
+                            session.connect(5000)
 
                             val channel = session.openChannel("exec")
                             (channel as com.jcraft.jsch.ChannelExec).setCommand(command)
@@ -50,7 +49,11 @@ class MainActivity: FlutterActivity() {
                             channel.outputStream = outputStream
                             channel.connect()
 
-                            while (!channel.isClosed) { Thread.sleep(100) }
+                            var attempts = 0
+                            while (!channel.isClosed && attempts < 50) { 
+                                Thread.sleep(100)
+                                attempts++
+                            }
 
                             val exitStatus = channel.exitStatus
                             session.disconnect()
@@ -69,8 +72,7 @@ class MainActivity: FlutterActivity() {
                     val targetIp = call.argument<String>("ip") ?: "10.30.0.1"
                     Thread {
                         val isReachable = try {
-                            // تنفيذ أمر ping مباشرة تماماً كما في Termux
-                            val process = Runtime.getRuntime().exec("ping -c 1 -w 2 $targetIp")
+                            val process = Runtime.getRuntime().exec("ping -c 1 -w 1 $targetIp")
                             val exitVal = process.waitFor()
                             exitVal == 0
                         } catch (e: Exception) {

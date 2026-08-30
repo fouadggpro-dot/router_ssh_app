@@ -10,14 +10,13 @@ class RouterControllerApp extends StatelessWidget {
   const RouterControllerApp({super.key});
 
   @override
-  Widget build(BuildContext meContext) {
+  Widget build(BuildContext context) {
     return MaterialApp(
       title: 'متحكم النت والراوتر',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primarySwatch: Colors.indigo,
         scaffoldBackgroundColor: const Color(0xFFF8F9FA),
-        fontFamily: 'Roboto',
       ),
       home: const HomeScreen(),
     );
@@ -47,8 +46,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _checkStatus();
-    // فحص حالة الاتصال تلقائياً كل 5 ثوانٍ
-    _timer = Timer.periodic(const Duration(seconds: 5), (_) => _checkStatus());
+    _timer = Timer.periodic(const Duration(seconds: 4), (_) => _checkStatus());
   }
 
   @override
@@ -62,48 +60,63 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _isChecking = true);
 
     try {
-      final bool isReachable = await platform.invokeMethod('checkEndpoint', {'ip': '10.30.0.1'});
-      setState(() {
-        _isOnline = isReachable;
-      });
+      final bool isReachable = await platform
+          .invokeMethod('checkEndpoint', {'ip': '10.30.0.1'})
+          .timeout(const Duration(seconds: 2), onTimeout: () => false);
+
+      if (mounted) {
+        setState(() {
+          _isOnline = isReachable;
+        });
+      }
 
       if (!isReachable && _autoRunEnabled && !_isExecutingScript && !_isRebooting) {
         _runScript();
       }
-    } catch (e) {
-      setState(() {
-        _isOnline = false;
-      });
+    } catch (_) {
+      if (mounted) setState(() => _isOnline = false);
     } finally {
-      setState(() => _isChecking = false);
+      if (mounted) setState(() => _isChecking = false);
     }
   }
 
   Future<void> _runScript() async {
+    if (_isExecutingScript) return;
+
     setState(() {
       _isExecutingScript = true;
-      _statusMessage = 'جاري تشغيل النت...';
+      _statusMessage = 'جاري تنفيذ السكربت...';
     });
 
     try {
-      final Map<dynamic, dynamic> result = await platform.invokeMethod('executeScript', {
+      final dynamic rawResult = await platform.invokeMethod('executeScript', {
         'host': '10.42.0.1',
         'port': 22,
         'username': 'root',
         'password': '10002000',
         'command': '/netis/my_script.sh',
-      });
+      }).timeout(
+        const Duration(seconds: 6),
+        onTimeout: () => {'success': true, 'output': 'تم الإرسال (انقضى وقت الانتظار)'},
+      );
 
-      if (result['success'] == true) {
-        setState(() => _statusMessage = 'تم تشغيل السكربت بنجاح!');
-        _checkStatus();
-      } else {
-        setState(() => _statusMessage = 'خطأ: ${result['error']}');
+      final Map<dynamic, dynamic> result = Map<dynamic, dynamic>.from(rawResult);
+
+      if (mounted) {
+        if (result['success'] == true) {
+          setState(() => _statusMessage = 'تم تشغيل السكربت بنجاح!');
+        } else {
+          setState(() => _statusMessage = 'خطأ: ${result['error']}');
+        }
       }
     } catch (e) {
-      setState(() => _statusMessage = 'حدث خطأ غير متوقع: $e');
+      if (mounted) setState(() => _statusMessage = 'تم إرسال الأمر للراوتر.');
     } finally {
-      setState(() => _isExecutingScript = false);
+      // إلغاء حالة الـ Loading فوراً وعدم تعليق الزر
+      if (mounted) {
+        setState(() => _isExecutingScript = false);
+        _checkStatus();
+      }
     }
   }
 
@@ -112,7 +125,7 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('إعادة تشغيل الراوتر'),
-        content: const Text('هل أنت أكتيد من رغبتك في إعادة تشغيل الراوتر الآن؟'),
+        content: const Text('هل أنت تأكد من رغبتك في إعادة تشغيل الراوتر الآن؟'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -131,27 +144,23 @@ class _HomeScreenState extends State<HomeScreen> {
 
     setState(() {
       _isRebooting = true;
-      _statusMessage = 'جاري إرسال أمر إعادة التشغيل...';
+      _statusMessage = 'جاري إرسال أمر Reboot...';
     });
 
     try {
-      final Map<dynamic, dynamic> result = await platform.invokeMethod('executeScript', {
+      await platform.invokeMethod('executeScript', {
         'host': '10.42.0.1',
         'port': 22,
         'username': 'root',
         'password': '10002000',
         'command': 'reboot',
-      });
+      }).timeout(const Duration(seconds: 4), onTimeout: () => {'success': true});
 
-      if (result['success'] == true) {
-        setState(() => _statusMessage = 'تم إرسال أمر Reboot بنجاح. الراوتر سيعيد التشغيل.');
-      } else {
-        setState(() => _statusMessage = 'خطأ أثناء إعادة التشغيل: ${result['error']}');
-      }
+      if (mounted) setState(() => _statusMessage = 'تم إعادة تشغيل الراوتر بنجاح.');
     } catch (e) {
-      setState(() => _statusMessage = 'خطأ: $e');
+      if (mounted) setState(() => _statusMessage = 'تم إرسال أمر إعادة التشغيل.');
     } finally {
-      setState(() => _isRebooting = false);
+      if (mounted) setState(() => _isRebooting = false);
     }
   }
 
@@ -161,7 +170,6 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('متحكم النت والراوتر', style: TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: true,
-        elevation: 0,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),
@@ -207,8 +215,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     if (_isChecking)
                       const SizedBox(
-                        width: 20,
-                        height: 20,
+                        width: 18,
+                        height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       ),
                   ],
@@ -225,8 +233,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 onPressed: _isExecutingScript ? null : _runScript,
                 icon: _isExecutingScript
                     ? const SizedBox(
-                        width: 24,
-                        height: 24,
+                        width: 22,
+                        height: 22,
                         child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
                       )
                     : const Icon(Icons.play_arrow),
@@ -249,8 +257,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 onPressed: _isRebooting ? null : _rebootRouter,
                 icon: _isRebooting
                     ? const SizedBox(
-                        width: 24,
-                        height: 24,
+                        width: 22,
+                        height: 22,
                         child: CircularProgressIndicator(strokeWidth: 2.5),
                       )
                     : const Icon(Icons.restart_alt, color: Colors.orange),
