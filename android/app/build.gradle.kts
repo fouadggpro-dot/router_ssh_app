@@ -15,8 +15,6 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0.0"
-
-        // تم حذف بلوك ndk { abiFilters ... } لمنع التعارض
     }
 
     buildTypes {
@@ -28,6 +26,9 @@ android {
     }
 
     compileOptions {
+        // تفعيل ميزة Desugaring لدعم التوافق مع المكتبات الحديثة
+        isCoreLibraryDesugaringEnabled = true
+
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -42,6 +43,9 @@ flutter {
 }
 
 dependencies {
+    // مكتبة Desugaring المطلوبة لـ flutter_local_notifications
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
     implementation("com.jcraft:jsch:0.1.55")
 }
