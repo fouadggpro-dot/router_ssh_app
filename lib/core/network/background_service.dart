@@ -1,15 +1,26 @@
 import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'lan_client_service.dart';
 import '../security/device_identity.dart';
 
-/// Keeps the LAN connection alive while the app is backgrounded, via a
-/// persistent, always-visible foreground-service notification. The
-/// notification text always states which Controller (if any) this
-/// device is linked to — the same visibility promised in the design —
-/// and the service does nothing beyond what LanClientService already
-/// does (discover, register, relay commands to the approval UI).
 Future<void> initBackgroundService() async {
   final service = FlutterBackgroundService();
+
+  // إنشاء قناة الإشعارات في أندرويد لتفادي Bad notification exception
+  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+      FlutterLocalNotificationsPlugin();
+
+  const AndroidNotificationChannel channel = AndroidNotificationChannel(
+    'lan_connection', // ID القناة
+    'LAN Connection Service', // اسم القناة الظاهر للمستخدم
+    description: 'Keeps the router control background service alive',
+    importance: Importance.low, // مستوى الأولوية للإشعار المستمر
+  );
+
+  await flutterLocalNotificationsPlugin
+      .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(channel);
 
   await service.configure(
     androidConfiguration: AndroidConfiguration(
