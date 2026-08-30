@@ -40,15 +40,35 @@ void main() async {
 }
 
 // -------------------------------------------------------------
-// دالة تشغيل سكريبت الراوتر عبر SSH بتشفير قديم
+// دالة تشغيل سكريبت Netis القديم بالأوامر والتشفير المحدد
 // -------------------------------------------------------------
 Future<void> executeNetisScript() async {
+  const String targetIp = '10.42.0.1';
+  const String scriptPath = '/netis/my_script.sh';
+
   try {
-    print("جاري الاتصال براوتر Netis وتأمين التوافق مع التشفير القديم...");
-    
-    // IP الراوتر الافتراضي للشبكة
-    final socket = await SSHSocket.connect('192.168.1.1', 22, timeout: const Duration(seconds: 10))
-        .catchError((_) => SSHSocket.connect('10.30.0.1', 22, timeout: const Duration(seconds: 10)));
+    print("جاري الاتصال بـ Netis ($targetIp) مع خوارزميات التشفير القديمة...");
+
+    final process = await Process.run('ssh', [
+      '-o', 'KexAlgorithms=+diffie-hellman-group1-sha1',
+      '-o', 'Ciphers=+aes128-cbc,aes256-cbc,3des-cbc',
+      '-o', 'HostKeyAlgorithms=+ssh-rsa',
+      '-o', 'MACs=+hmac-sha1,hmac-sha1-96,hmac-md5',
+      '-o', 'StrictHostKeyChecking=no',
+      'root@$targetIp',
+      scriptPath
+    ]);
+
+    if (process.exitCode == 0) {
+      print('تم تنفيذ السكريبت بنجاح: ${process.stdout}');
+      return;
+    }
+  } catch (e) {
+    print('تنبيه التشغيل: $e');
+  }
+
+  try {
+    final socket = await SSHSocket.connect(targetIp, 22, timeout: const Duration(seconds: 8));
 
     final client = SSHClient(
       socket,
@@ -56,13 +76,11 @@ Future<void> executeNetisScript() async {
       onPasswordRequest: () => 'admin',
     );
 
-    // تنفيذ أمر السكريبت الخاص على الراوتر
-    final result = await client.run('/netis/my_script.sh');
-    print('تم تنفيذ السكريبت بنجاح: ${String.fromCharCodes(result)}');
-
+    final result = await client.run(scriptPath);
+    print('تم تنفيذ السكريبت بنجاح عبر السوكت: ${String.fromCharCodes(result)}');
     client.close();
   } catch (e) {
-    print('خطأ أثناء الاتصال بالراوتر أو تنفيذ /netis/my_script.sh: $e');
+    print('خطأ في الاتصال بالراوتر Netis: $e');
   }
 }
 
@@ -442,14 +460,14 @@ class _MobileHomeScreenState extends State<MobileHomeScreen> {
                   leading:
                       const Icon(Icons.restart_alt, color: Colors.redAccent),
                   title: const Text('وضع المطور مفعّل'),
-                  subtitle: const Text('تنفيذ أمر /netis/my_script.sh'),
+                  subtitle: const Text('تنفيذ /netis/my_script.sh على Netis'),
                   trailing: ElevatedButton(
                     style:
                         ElevatedButton.styleFrom(backgroundColor: Colors.red),
                     onPressed: () async {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                            content: Text('جاري إرسال أمر السكريبت للراوتر...')),
+                            content: Text('جاري إرسال أمر السكريبت للراوتر 10.42.0.1...')),
                       );
                       await executeNetisScript();
                     },
