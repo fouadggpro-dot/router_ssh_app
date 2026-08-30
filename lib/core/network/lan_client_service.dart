@@ -4,12 +4,28 @@ import 'dart:io';
 import 'package:web_socket_channel/io.dart';
 
 class LanClientService {
+  // Singleton Pattern
+  static final LanClientService _instance = LanClientService._internal();
+  factory LanClientService() => _instance;
+  LanClientService._internal();
+
   IOWebSocketChannel? _channel;
   Timer? _heartbeatTimer;
   Timer? _discoveryTimer;
 
+  // الخصائص المطلوبة في main.dart
+  bool isConnected = false;
+  Function(bool)? onAppStatusChanged;
+  Function(bool)? onDevModeChanged;
+
+  // دالة البدء الرئيسية التي يستدعيها main.dart
+  void start() {
+    startDiscoveryAndConnect();
+  }
+
   void startDiscoveryAndConnect() {
     // إرسال طلب استكشاف كل 3 ثوانٍ حتى يجد الحاسوب
+    _discoveryTimer?.cancel();
     _discoveryTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
       if (_channel != null) return; // متصل بالفعل
 
@@ -35,7 +51,7 @@ class LanClientService {
               if (json['type'] == 'CONTROLLER_HERE') {
                 String controllerIp = dg.address.address;
                 int port = json['wsPort'] ?? 8080;
-                
+
                 // إلغاء مؤقت البحث والاتصال بالـ WebSocket
                 _discoveryTimer?.cancel();
                 socket.close();
@@ -53,28 +69,34 @@ class LanClientService {
   void _connectToWebSocket(String ip, int port) {
     try {
       _channel = IOWebSocketChannel.connect(Uri.parse('ws://$ip:$port'));
+      isConnected = true;
 
       // 1. إرسال تسجيل الجهاز للـ PC
       _sendRegisterMessage();
 
-      // 2. البدء بإرسال Heartbeat كل 5 ثوانٍ ليعرف الكمبيوتر أن الجهاز متصل
+      // 2. البدء بإرسال Heartbeat كل 5 ثوانٍ
       _startHeartbeat();
 
-      // 3. الاستماع لأوامر الـ PC (مثل إعادة تشغيل الراوتر REBOOT_ROUTER)
+      // 3. الاستماع لأوامر الـ PC
       _channel!.stream.listen(
         (message) {
           _handleServerCommand(message);
         },
         onDone: () {
           _channel = null;
-          startDiscoveryAndConnect(); // إعادة محاولة الاتصال عند الانقطاع
+          isConnected = false;
+          _heartbeatTimer?.cancel();
+          startDiscoveryAndConnect(); // إعادة محاولة الاتصال
         },
         onError: (error) {
           _channel = null;
+          isConnected = false;
+          _heartbeatTimer?.cancel();
           startDiscoveryAndConnect();
         },
       );
     } catch (e) {
+      isConnected = false;
       print("WebSocket connect error: $e");
     }
   }
@@ -83,12 +105,12 @@ class LanClientService {
     final msg = jsonEncode({
       'header': {
         'messageId': DateTime.now().millisecondsSinceEpoch.toString(),
-        'deviceId': 'android_phone_01', // ضع الـ ID الخاص بالجهاز
+        'deviceId': 'android_phone_01',
         'type': 'REGISTER',
         'timestamp': DateTime.now().millisecondsSinceEpoch,
       },
       'payload': {
-        'userName': 'Fouad Phone', // اسم المستخدم المراد إظهاره في برنامج الـ PC
+        'userName': 'Fouad Phone',
       }
     });
     _channel?.sink.add(msg);
@@ -97,7 +119,7 @@ class LanClientService {
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
-      if (_channel != null) {
+      if (_channel != null && isConnected) {
         final msg = jsonEncode({
           'header': {
             'messageId': DateTime.now().millisecondsSinceEpoch.toString(),
@@ -113,12 +135,25 @@ class LanClientService {
   }
 
   void _handleServerCommand(dynamic message) {
-    final json = jsonDecode(message.toString());
-    final type = json['header']['type'];
+    try {
+      final json = jsonDecode(message.toString());
+      final type = json['header']['type'];
 
-    if (type == 'REBOOT_ROUTER') {
-      print("تم استقبال أمر إعادة تشغيل الراوتر من الكمبيوتر!");
-      // هنا يتم استدعاء سكريبت SSH لإعادة تشغيل الراوتر
+      if (type == 'REBOOT_ROUTER') {
+        print("تم استقبال أمر إعادة تشغيل الراوتر من الكمبيوتر!");
+      } else if (type == 'APP_STATUS') {
+        bool isDisabled = json['payload']['isDisabled'] ?? false;
+        if (onAppStatusChanged != null) {
+          onAppStatusChanged!(isDisabled);
+        }
+      } else if (type == 'DEV_MODE') {
+        bool isDev = json['payload']['isDev'] ?? false;
+        if (onDevModeChanged != null) {
+          onDevModeChanged!(isDev);
+        }
+      }
+    } catch (e) {
+      print("Error parsing server command: $e");
     }
   }
 }
