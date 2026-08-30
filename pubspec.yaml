@@ -1,7 +1,6 @@
-name: router_controller
-description: "A new Flutter project."
+name: router_controller_agent
+description: "Router Controller — device agent (LAN, approval-gated)."
 publish_to: 'none'
-
 version: 1.0.0+1
 
 environment:
@@ -12,14 +11,10 @@ dependencies:
     sdk: flutter
   flutter_secure_storage: ^9.2.2
   uuid: ^4.5.1
-  shared_preferences: ^2.2.2
-  flutter_background_service: ^5.0.0
-  flutter_local_notifications: ^17.0.0
-  permission_handler: ^11.3.0
   web_socket_channel: ^2.4.1
-  open_filex: ^4.5.0
-  path_provider: ^2.1.2
-  dartssh2: ^2.8.2
+  permission_handler: ^11.3.0
+  flutter_local_notifications: ^17.0.0
+  flutter_background_service: ^5.0.0
 
 dev_dependencies:
   flutter_test:
