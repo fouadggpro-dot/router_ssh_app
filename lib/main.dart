@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:router_controller/core/network/background_service.dart';
-import 'package:router_controller/core/security/device_identity.dart';
-import 'package:router_controller/ui/screens/pairing_screen.dart';
-import 'package:router_controller/ui/screens/home_screen.dart';
+import 'core/network/background_service.dart';
+import 'core/security/device_identity.dart';
+import 'ui/screens/pairing_screen.dart';
+import 'ui/screens/home_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -57,7 +57,7 @@ class _RouterControllerAppState extends State<RouterControllerApp> {
     }
 
     return _isPaired
-        ? const HomeScreen()
+        ? HomeScreen()
         : PairingScreen(onPaired: () => setState(() => _isPaired = true));
   }
 }
