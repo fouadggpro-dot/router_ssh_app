@@ -18,6 +18,8 @@ pluginManagement {
 
 plugins {
     id("dev.flutter.flutter-gradle-plugin") version "1.0.0" apply false
+    id("com.android.application") version "8.3.0" apply false
+    id("org.jetbrains.kotlin.android") version "1.9.22" apply false
 }
 
 dependencyResolutionManagement {
@@ -25,7 +27,7 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven { url = java.net.URI("https://jitpack.io") } // <-- أضف هذا السطر هنا
+        maven { url = java.net.URI("https://jitpack.io") }
     }
 }
 
