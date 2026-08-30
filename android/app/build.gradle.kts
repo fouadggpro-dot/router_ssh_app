@@ -10,7 +10,6 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
-        // تفعيل Desugaring لحل مشكلة flutter_local_notifications
         isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -27,6 +26,16 @@ android {
         versionName = "1.0.0"
     }
 
+    // إعدادات تجميع الملفات واستثناء المكرر منها
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+            excludes += "META-INF/INDEX.LIST"
+            excludes += "META-INF/DEPENDENCIES"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -41,7 +50,6 @@ flutter {
 }
 
 dependencies {
-    // مكتبة Desugaring الإجبارية
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 
     implementation("com.jcraft:jsch:0.1.55")
