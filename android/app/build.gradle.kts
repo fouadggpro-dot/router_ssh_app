@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.routercontroller.agent"
-    compileSdk = 34
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -20,7 +20,7 @@ android {
     defaultConfig {
         applicationId = "com.routercontroller.agent"
         minSdk = 23
-        targetSdk = 34
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0.0"
     }
@@ -33,7 +33,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("debug") // TODO: replace with real release signing config
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 }
